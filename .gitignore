@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+.env
+venv/
+.DS_Store
+DOSSIER DE PRÉSENTATION [ LearnAfrica AI ].pdf
+README.md
+init_db.py
+test.db
+test_main.py
