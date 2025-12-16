@@ -40,11 +40,27 @@ model = genai.GenerativeModel(model_name="gemini-flash-latest",
 
 async def generate_response(prompt: str, context: str = "") -> str:
     """
-    Génère une réponse simple à partir d'un prompt via Gemini, avec contexte optionnel.
+    Génère une réponse pédagogique et empathique via Gemini.
     """
-    full_prompt = prompt
     if context:
-        full_prompt = f"Tu es un tuteur intelligent pour LearnAfrica AI.\n\nContexte:\n{context}\n\nQuestion de l'apprenant: {prompt}"
+        full_prompt = f"""
+        Tu es un tuteur personnel intelligent pour LearnAfrica AI.
+        Ton rôle est d'aider l'étudiant à comprendre le cours, en étant encourageant, clair et concis.
+        
+        CONTEXTE DU COURS :
+        {context}
+        
+        Question de l'apprenant : {prompt}
+        
+        Réponds en utilisant le contexte ci-dessus. Si la réponse n'est pas dans le contexte, dis-le poliment et propose d'élargir la recherche (tes connaissances générales).
+        Sois structuré (utilise des listes si nécessaire).
+        """
+    else:
+        full_prompt = f"""
+        Tu es un tuteur personnel intelligent pour LearnAfrica AI.
+        Question de l'apprenant : {prompt}
+        Réponds de manière pédagogique et encourageante.
+        """
 
     try:
         response = model.generate_content(full_prompt)
@@ -55,28 +71,64 @@ async def generate_response(prompt: str, context: str = "") -> str:
 
 async def generate_quiz_for_topic(topic: str, num_questions: int = 5, context: str = "") -> str:
     """
-    Génère un quiz sur un sujet donné, avec contexte optionnel (contenu du cours).
+    Génère un quiz professionnel au format JSON strict sur un sujet donné.
+    Utilise le mode JSON natif de Gemini 1.5 Flash.
     """
-    base_prompt = f"Génère un quiz de {num_questions} questions à choix multiples sur le sujet : {topic}."
     
+    # Prompt optimisé pour la qualité pédagogique
+    prompt = f"""
+    Tu es un expert pédagogique et tuteur pour LearnAfrica AI.
+    Ta tâche est de créer un quiz d'évaluation précis et pertinent.
+    
+    Sujet : {topic}
+    Nombre de questions : {num_questions}
+    
+    Instructions Pédagogiques :
+    1. Les questions doivent être claires, sans ambiguïté.
+    2. Les réponses fausses (distracteurs) doivent être plausibles mais clairement incorrectes.
+    3. Le niveau de difficulté doit être adapté à un apprenant motivé.
+    """
+
     if context:
-        base_prompt += f"\n\nUtilise EXCLUSIVEMENT le contenu du cours suivant pour générer les questions et réponses :\n{context}"
+        prompt += f"""
+        
+        CONTEXTE STRICT DU COURS :
+        Utilise EXCLUSIVEMENT les informations fournies ci-dessous pour formuler tes questions et réponses.
+        Si l'information n'est pas dans le contexte, ne l'invente pas.
+        ---
+        {context}
+        ---
+        """
+
+    # Schéma JSON attendu (documentation pour le modèle)
+    prompt += """
     
-    prompt = (
-        f"{base_prompt}\n"
-        "Le format de sortie DOIT être un JSON valide sans markdown, respectant cette structure : "
-        "{ \"questions\": [ { \"question\": \"...\", \"options\": [\"...\", \"...\"], \"answer\": 0 } ] }"
-    )
-    # Note: On pourra utiliser response_mime_type="application/json" avec gemini-1.5-flash dans le futur
-    # pour garantir le JSON. Pour l'instant on force via le prompt.
+    Format de sortie attendu (JSON) :
+    {
+      "questions": [
+        {
+          "question": "Texte de la question",
+          "options": ["Option A", "Option B", "Option C", "Option D"],
+          "answer": 0, // Index de la bonne réponse (0 pour A, 1 pour B, etc.)
+          "explanation": "Brève explication de la bonne réponse"
+        }
+      ]
+    }
+    """
     
     try:
-        # Pour le quiz, on peut vouloir forcer le JSON si le modèle le supporte via config locale
+        # Configuration spécifique pour forcer le JSON
+        # Nécessite un modèle compatible comme gemini-1.5-flash ou gemini-1.5-pro
         json_config = generation_config.copy()
-        # json_config["response_mime_type"] = "application/json" 
+        json_config["response_mime_type"] = "application/json"
+        
+        # On utilise le même modèle mais avec la config JSON surchargée pour cet appel
+        # Note: genai.GenerativeModel est stateful pour la config, donc on réinstancie ou on passe la config
+        # La méthode generate_content accepte generation_config en surcharge
         
         response = model.generate_content(prompt, generation_config=json_config)
         return response.text
     except Exception as e:
         logger.error(f"Error generating quiz: {e}")
-        return "{}"
+        # En cas d'erreur, on retourne un JSON vide valide pour éviter le crash
+        return '{ "questions": [] }'
